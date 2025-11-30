@@ -8,7 +8,7 @@ This repository contains a **self-contained data pipeline for a free-to-play mob
 4. An **Excel dashboard builder** that turns those KPIs into charts in a single workbook (`kpi_dashboard.py`).
 5. A small **DB inspector** to explore the schema and tables (`inspect_db.py`).
 
-The project is meant for **learning and demo purposes**: you can use it to practice game analytics, build dashboards, or use it as a tech demo in an interview.
+The project is meant for **learning and demo purposes**: you can use it to e.g. to practice game analytics and/or build dashboards.
 
 ---
 
@@ -61,7 +61,7 @@ Generated files will be recreated/overwritten when you re-run the scripts.
 pip install pandas openpyxl xlsxwriter
 ```
 
-The scripts also use only standard library modules (`sqlite3`, `datetime`, `random`, `math`, `json`, etc.).
+The scripts also use only standard library modules (`sqlite3`, `datetime`, `random`, `math`, `json`).
 
 ---
 
