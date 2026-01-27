@@ -243,6 +243,7 @@ This writes `pricing_experiment_effects.png` with
 category X purchases per 1k assigned players by variant, see below:
 
 <img src="pricing_experiment_effects.png" width="800">
+
 ---
 
 ## Data model overview
