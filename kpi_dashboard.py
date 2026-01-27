@@ -321,6 +321,12 @@ ab_chart.legend = None
 
 _configure_axis(ab_chart, label_skip=1)
 
+# Show retention as percentages on a readable 0–4% scale (no data labels;
+# data label XML has been a frequent source of Excel repair prompts on macOS).
+ab_chart.y_axis.scaling.min = 0
+ab_chart.y_axis.scaling.max = 0.04
+ab_chart.y_axis.number_format = "0.0%"
+
 dash.add_chart(ab_chart, "A33")
 
 
