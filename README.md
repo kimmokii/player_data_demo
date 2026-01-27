@@ -220,7 +220,7 @@ It:
 
 Finally open `kpi_dashboard_with_charts.xlsx` in Excel (or compatible) to view the charts.
 
-<img src="demo_kpi_excel_v2.png" width="1500">
+<img src="demo_kpi_excel.png" width="1500">
 
 ---
 
