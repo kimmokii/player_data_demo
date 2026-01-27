@@ -239,11 +239,10 @@ If you want a quick visual that highlights the **Control/A/B behavior** for the 
 python plot_pricing_experiment.py
 ```
 
-This writes `pricing_experiment_effects.png` with:
-<img src="pricing_experiment_effects.png" width="1500">
+This writes `pricing_experiment_effects.png` with
+category X purchases per 1k assigned players by variant, see below:
 
-- Category X purchases per 1k assigned players by variant
-
+<img src="pricing_experiment_effects.png" width="800">
 ---
 
 ## Data model overview
