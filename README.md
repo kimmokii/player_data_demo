@@ -240,6 +240,7 @@ python plot_pricing_experiment.py
 ```
 
 This writes `pricing_experiment_effects.png` with:
+<img src="pricing_experiment_effects.png" width="1500">
 
 - Category X purchases per 1k assigned players by variant
 
