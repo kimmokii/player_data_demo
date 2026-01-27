@@ -19,7 +19,10 @@ The project is meant for **learning and demo purposes**: you can use it to e.g. 
 - **Configurable simulation**
   - Number of days, total players, DAU curve shape, churn behaviour, spend segments, etc.
 - **Experiments / A/B tests**
-  - Simple `shop_pricing_v1` experiment with `Control`, `A`, `B` variants.
+  - Simple `shop_pricing_v1` pricing experiment with `Control`, `A`, `B` variants.
+    - `Control`: default pricing for product category X
+    - `A`: expensive pricing (appeals mainly to whales)
+    - `B`: cheap pricing (appeals broadly, increases volume)
 - **Core KPIs out of the box**
   - DAU per day  
   - WAU per week (calendar weeks)  
@@ -95,9 +98,34 @@ The generator will:
   - Simple churn model (most players churn within weeks, some “core” users stay long)
 - Assign players to teams of varying sizes (small, medium, large).
 - Assign each player into `shop_pricing_v1` experiment (`Control`, `A`, `B`).
+  - This affects **spending behaviour & price** for product category X (not sessions/DAU/retention).
 - Generate a DAU curve with:
   - Launch spike, early decay, patches, seasonal effects
 - Generate sessions, events and purchases that depend on engagement & spend segment.
+
+**Pricing experiment model (exact)**
+
+The pricing experiment is implemented as a synthetic “category X” purchase stream:
+
+- A fixed share of purchase opportunities are treated as category X: `CATEGORY_X_SHARE = 0.35`.
+- Category X uses a base price draw (Control anchor) and then applies a variant multiplier:
+  - Base price (EUR): one of `4.99` (55%), `9.99` (30%), `19.99` (15%).
+  - Price multiplier by variant:
+    - `Control`: `1.00`
+    - `A` (expensive): `1.30`
+    - `B` (cheap): `0.75`
+- Purchase conversion is adjusted (relative to the baseline spend-segment purchase probability) by variant and spend segment:
+  - Baseline purchase probability (unchanged by experiment): `minnow=0.01`, `dolphin=0.03`, `whale=0.10`.
+  - Conversion multiplier for category X:
+    - `Control`: `minnow=1.00`, `dolphin=1.00`, `whale=1.00`
+    - `A`: `minnow=0.55`, `dolphin=0.85`, `whale=1.35`
+    - `B`: `minnow=1.55`, `dolphin=1.35`, `whale=1.10`
+- Any non-category-X purchases use the baseline catalogue and are **not** affected by the experiment.
+
+Notes:
+
+- This setup is intentionally designed so `A` shifts revenue toward whales, and `B` increases purchase volume across the population.
+- Randomness is reproducible via `RANDOM_SEED` in `generate_mock_data.py`.
 
 Prices are stored as **integer cents** (`price_eur` field), e.g. 4.99 EUR → `499`.
 
@@ -129,6 +157,7 @@ This script reads from `mock_game2.db` and produces `kpi_dashboard_data.xlsx` wi
 - `WAU_weekly`  
 - `MAU_monthly`  
 - `Revenue_daily`  
+- `Revenue_by_variant_daily`
 - `AB_retention`
 
 Run:
@@ -154,6 +183,10 @@ What it computes:
 - **Revenue per day** (`Revenue_daily`)
   - `day`
   - `revenue_eur` (sum of `price_eur` converted from cents to euros)
+
+- **Revenue per day by variant** (`Revenue_by_variant_daily`)
+  - `day`
+  - `Control`, `A`, `B` (EUR)
 
 - **Experiment retention cohorts** (`AB_retention`)
   - One row per `(experiment_name, variant, cohort_first_day)`:
@@ -182,11 +215,12 @@ It:
    - **WAU** (per week)
    - **MAU** (per month, with month names on x-axis)
    - **Revenue per day (EUR)** (different colour)
-   - **Avg D1 retention by variant** (one bar each for `control`, `A`, `B`)
+  - **Revenue per day by variant (EUR)**
+  - **Avg D1 retention by variant** (one bar each for `Control`, `A`, `B`)
 
 Finally open `kpi_dashboard_with_charts.xlsx` in Excel (or compatible) to view the charts.
 
-<img src="demo_kpi_excel.png" width="1500">
+<img src="demo_kpi_excel_v2.png" width="1500">
 
 ---
 
@@ -231,7 +265,6 @@ Ideas for extensions:
   - Platform or country splits
 - Add more charts to `kpi_dashboard.py`:
   - Revenue per month
-  - LTV curves
   - Country/platform breakdowns
 
 ---
