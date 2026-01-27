@@ -81,14 +81,35 @@ else:
 # Keep the sheet clean (no header text in cells)
 dash["A1"] = None
 
+# If previous runs added external title cells, clear them so we don't get duplicates.
+for addr in ["A2", "M2", "A17", "M17", "A32", "M32"]:
+    dash[addr].value = None
 
-def set_chart_title(chart, title: str) -> None:
-    """Set chart title text in an Excel-compatible way."""
+
+def set_chart_title(chart, title: str, font_size_pt: int | None = None) -> None:
+    """Set chart title text in an Excel-compatible way.
+
+    NOTE: Setting chart-title font size has previously triggered Excel repair
+    prompts on macOS for some workbooks. We apply it only when explicitly
+    requested (font_size_pt not None), and we do it in a best-effort way.
+    """
     chart.title = title
     try:
         chart.title.overlay = False
     except Exception:
         pass
+
+    if font_size_pt is None:
+        return
+
+    # DrawingML uses 1/100 pt units.
+    try:
+        rich = chart.title.tx.rich
+        if rich is not None and rich.p and rich.p[0].pPr is not None:
+            rich.p[0].pPr.defRPr.sz = int(font_size_pt) * 100
+    except Exception:
+        # Best-effort; keep workbook generation working.
+        return
 
 
 def _configure_axis(chart, label_skip: int = 1) -> None:
@@ -125,6 +146,7 @@ def add_bar_chart(
     val_col,
     pos,
     color="4472C4",
+    title_font_size_pt: int | None = None,
 ):
     """
     Create a simple bar chart:
@@ -140,7 +162,7 @@ def add_bar_chart(
     cat_ref = Reference(data_sheet, min_col=cat_col, min_row=2, max_row=max_row)
 
     chart = BarChart()
-    set_chart_title(chart, title)
+    set_chart_title(chart, title, font_size_pt=title_font_size_pt)
 
     chart.add_data(data_ref, titles_from_data=True)
     chart.set_categories(cat_ref)
@@ -167,13 +189,14 @@ def add_line_chart(
     val_col,
     pos,
     label_skip: int = 1,
+    title_font_size_pt: int | None = None,
 ):
     max_row = data_sheet.max_row
     data_ref = Reference(data_sheet, min_col=val_col, min_row=1, max_row=max_row)
     cat_ref = Reference(data_sheet, min_col=cat_col, min_row=2, max_row=max_row)
 
     chart = LineChart()
-    set_chart_title(chart, title)
+    set_chart_title(chart, title, font_size_pt=title_font_size_pt)
     chart.add_data(data_ref, titles_from_data=True)
     chart.set_categories(cat_ref)
     chart.legend = None
@@ -197,6 +220,7 @@ def add_multi_line_chart(
     pos,
     label_skip: int = 1,
     legend_position: str = "t",
+    title_font_size_pt: int | None = None,
 ):
     max_row = data_sheet.max_row
     data_ref = Reference(
@@ -209,7 +233,7 @@ def add_multi_line_chart(
     cat_ref = Reference(data_sheet, min_col=cat_col, min_row=2, max_row=max_row)
 
     chart = LineChart()
-    set_chart_title(chart, title)
+    set_chart_title(chart, title, font_size_pt=title_font_size_pt)
     chart.add_data(data_ref, titles_from_data=True)
     chart.set_categories(cat_ref)
     chart.varyColors = False
@@ -252,6 +276,7 @@ add_line_chart(
     val_col=2,
     pos="A3",
     label_skip=daily_label_skip,
+    title_font_size_pt=18,
 )
 
 # Revenue per day by variant (EUR)
@@ -265,6 +290,7 @@ add_multi_line_chart(
     pos="M33",
     label_skip=revenue_label_skip,
     legend_position="t",
+    title_font_size_pt=18,
 )
 
 # WAU per week
@@ -275,6 +301,7 @@ add_bar_chart(
     cat_col=1,
     val_col=2,
     pos="M3",
+    title_font_size_pt=18,
 )
 
 # MAU per month (x-axis shows month names, e.g. Jan, Feb, ...)
@@ -285,6 +312,7 @@ add_bar_chart(
     cat_col=3,  # month_name column
     val_col=2,
     pos="A18",
+    title_font_size_pt=18,
 )
 
 # Revenue per day (EUR)
@@ -296,6 +324,7 @@ add_line_chart(
     val_col=2,
     pos="M18",
     label_skip=revenue_label_skip,
+    title_font_size_pt=18,
 )
 
 
@@ -310,7 +339,7 @@ data_ref = Reference(ab_sum_ws, min_col=2, min_row=1, max_row=ab_max_row)
 cat_ref = Reference(ab_sum_ws, min_col=1, min_row=2, max_row=ab_max_row)
 
 ab_chart = BarChart()
-set_chart_title(ab_chart, "D1 retention by variant")
+set_chart_title(ab_chart, "Day-1 retention (%)", font_size_pt=18)
 ab_chart.add_data(data_ref, titles_from_data=True)
 ab_chart.set_categories(cat_ref)
 
