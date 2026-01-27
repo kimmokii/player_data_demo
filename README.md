@@ -64,6 +64,12 @@ Generated files will be recreated/overwritten when you re-run the scripts.
 pip install pandas openpyxl xlsxwriter
 ```
 
+Optional (for generating the experiment PNG plot):
+
+```bash
+pip install matplotlib
+```
+
 The scripts also use only standard library modules (`sqlite3`, `datetime`, `random`, `math`, `json`).
 
 ---
@@ -221,6 +227,21 @@ It:
 Finally open `kpi_dashboard_with_charts.xlsx` in Excel (or compatible) to view the charts.
 
 <img src="demo_kpi_excel.png" width="1500">
+
+---
+
+## Optional: Plot the pricing experiment (PNG)
+
+If you want a quick visual that highlights the **Control/A/B behavior** for the pricing experiment
+(note: the experiment affects **Category X purchases only**), run:
+
+```bash
+python plot_pricing_experiment.py
+```
+
+This writes `pricing_experiment_effects.png` with:
+
+- Category X purchases per 1k assigned players by variant
 
 ---
 
