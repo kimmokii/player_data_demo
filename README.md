@@ -30,7 +30,7 @@ The project is meant for **learning and demo purposes**: you can use it to e.g. 
   - Revenue per day  
   - Retention cohorts (D1 / D7 / D30) per experiment variant
 - **Excel dashboard**
-  - “One file” view of the key KPIs with bar charts:
+  - “One file” view of the key KPIs with line + bar charts:
     - DAU, WAU, MAU
     - Revenue per day (EUR)
     - Average D1 retention by variant for the A/B test
@@ -209,12 +209,12 @@ It:
 1. Reads the KPI sheets.
 2. Adds a month-name column to MAU (e.g. `Jan`, `Feb`, …).
 3. Creates (or reuses) a `Dashboard` sheet.
-4. Adds bar charts to the dashboard:
+4. Adds charts to the dashboard (mix of line + bar charts):
 
-   - **DAU** (per day)
+  - **DAU** (per day)
    - **WAU** (per week)
    - **MAU** (per month, with month names on x-axis)
-   - **Revenue per day (EUR)** (different colour)
+  - **Revenue per day (EUR)**
   - **Revenue per day by variant (EUR)**
   - **Avg D1 retention by variant** (one bar each for `Control`, `A`, `B`)
 

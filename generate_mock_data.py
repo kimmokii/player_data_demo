@@ -4,9 +4,9 @@ Mock game data generator for the provided schema.sql.
 
 This script will:
 
-1. Create a SQLite database (default: mock_game.db)
+1. Create a SQLite database (default: mock_game2.db)
 2. Apply the provided schema.sql file.
-3. Generate a synthetic dataset for roughly one year of activity:
+3. Generate a synthetic dataset for ~6 months of activity by default:
    - players
    - teams & team_memberships
    - daily DAU curve with seasonal and patch effects
@@ -61,6 +61,35 @@ PATCH_DAYS = [60, 120, 180]
 
 # Random seeds for reproducibility (feel free to tweak/remove)
 RANDOM_SEED = 131287
+
+# ---------------------------------------------------------------------
+# Pricing experiment model (shop_pricing_v1)
+#
+# This is used to make Control/A/B differences “real” and measurable:
+# only a subset of purchases ("Category X") is affected.
+# ---------------------------------------------------------------------
+
+# Share of purchase opportunities treated as "Category X".
+CATEGORY_X_SHARE = 0.35
+
+# Base prices for Category X (in EUR) and their probabilities.
+CATEGORY_X_BASE_PRICE_EUR = [4.99, 9.99, 19.99]
+CATEGORY_X_BASE_PRICE_WEIGHTS = [0.55, 0.30, 0.15]
+
+# Price multipliers by variant.
+PRICE_MULTIPLIER_BY_VARIANT: Dict[str, float] = {
+    "Control": 1.00,
+    "A": 1.30,
+    "B": 0.75,
+}
+
+# Conversion multipliers for Category X purchases (relative to baseline
+# spend-segment purchase probability).
+CONVERSION_MULTIPLIER_BY_VARIANT_AND_SEGMENT: Dict[str, Dict[str, float]] = {
+    "Control": {"minnow": 1.00, "dolphin": 1.00, "whale": 1.00},
+    "A": {"minnow": 0.55, "dolphin": 0.85, "whale": 1.35},
+    "B": {"minnow": 1.55, "dolphin": 1.35, "whale": 1.10},
+}
 
 # ---------------------------------------
 # Utility functions
@@ -500,9 +529,9 @@ def generate_teams_and_memberships(
 # Experiments
 # ---------------------------------------
 
-def generate_experiments(conn: sqlite3.Connection, players: List[PlayerMeta]) -> None:
+def generate_experiments(conn: sqlite3.Connection, players: List[PlayerMeta]) -> Dict[int, str]:
     """
-    Very simple A/B/C control experiment assignment:
+    Very simple pricing experiment assignment:
     - experiment_name: "shop_pricing_v1"
     - variants: Control / A / B
     - assigned_at_utc: creation date (for simplicity)
@@ -513,11 +542,13 @@ def generate_experiments(conn: sqlite3.Connection, players: List[PlayerMeta]) ->
         ) VALUES (?, ?, ?, ?)
     """
     rows = []
+    variant_by_player: Dict[int, str] = {}
     for p in players:
         variant = random.choices(
             ["Control", "A", "B"],
             weights=[0.5, 0.25, 0.25],
         )[0]
+        variant_by_player[p.player_id] = variant
         rows.append((
             "shop_pricing_v1",
             p.player_id,
@@ -526,6 +557,7 @@ def generate_experiments(conn: sqlite3.Connection, players: List[PlayerMeta]) ->
         ))
     conn.executemany(sql, rows)
     conn.commit()
+    return variant_by_player
 
 
 # ---------------------------------------
@@ -536,6 +568,7 @@ def generate_sessions_events_purchases(
     conn: sqlite3.Connection,
     players: List[PlayerMeta],
     dau_curve: List[int],
+    variant_by_player: Dict[int, str],
 ) -> None:
     """
     Generate sessions, events and purchases:
@@ -789,45 +822,90 @@ def generate_sessions_events_purchases(
                         else:  # whale
                             prob_purchase = 0.10
 
-                        if random.random() < prob_purchase:
-                            # Build a very simple product catalogue
-                            product = random.choices(
-                                [
-                                    ("soft_small", "SoftPack", 1.99, 500, 0),
-                                    ("soft_large", "SoftPack", 9.99, 3000, 0),
-                                    ("hard_small", "HardPack", 4.99, 0, 50),
-                                    ("hard_large", "HardPack", 19.99, 0, 300),
-                                    ("bundle", "Bundle", 9.99, 2500, 50),
-                                ],
-                                weights=[0.3, 0.2, 0.2, 0.1, 0.2],
-                            )[0]
-                            sku, ptype, price_eur, soft_grant, hard_grant = product
+                        variant = variant_by_player.get(p.player_id, "Control")
+                        if variant not in PRICE_MULTIPLIER_BY_VARIANT:
+                            variant = "Control"
 
+                        is_category_x = random.random() < CATEGORY_X_SHARE
+
+                        # For Category X, adjust conversion probability by variant.
+                        if is_category_x:
+                            seg_mult = CONVERSION_MULTIPLIER_BY_VARIANT_AND_SEGMENT.get(variant, {}).get(
+                                p.spend_segment,
+                                1.0,
+                            )
+                            effective_prob = prob_purchase * seg_mult
+                        else:
+                            effective_prob = prob_purchase
+
+                        if random.random() < effective_prob:
                             purchase_time = end_time + timedelta(
                                 seconds=random.randint(5, 60)
                             )
-                            price_cents = int(round(price_eur * 100))
 
-                            purchase_rows.append(
-                                (
-                                    purchase_id_counter,
-                                    p.player_id,
-                                    session_id,
-                                    purchase_time.isoformat(timespec="seconds") + "Z",
-                                    f"prod_{sku}",
-                                    ptype,
-                                    "EUR",
-                                    price_cents,
-                                    price_cents,
-                                    1,
-                                    soft_grant,
-                                    hard_grant,
-                                    p.platform,
-                                    p.country_code,
+                            if is_category_x:
+                                base_price = random.choices(
+                                    CATEGORY_X_BASE_PRICE_EUR,
+                                    weights=CATEGORY_X_BASE_PRICE_WEIGHTS,
+                                )[0]
+                                price_eur = base_price * PRICE_MULTIPLIER_BY_VARIANT[variant]
+                                price_cents = int(round(price_eur * 100))
+
+                                purchase_rows.append(
+                                    (
+                                        purchase_id_counter,
+                                        p.player_id,
+                                        session_id,
+                                        purchase_time.isoformat(timespec="seconds") + "Z",
+                                        "prod_category_x",
+                                        "CategoryX",
+                                        "EUR",
+                                        price_cents,
+                                        price_cents,
+                                        1,
+                                        0,
+                                        0,
+                                        p.platform,
+                                        p.country_code,
+                                    )
                                 )
-                            )
-                            purchase_id_counter += 1
-                            p.total_spend_eur += price_eur
+                                purchase_id_counter += 1
+                                p.total_spend_eur += price_eur
+                            else:
+                                # Non-category-X purchases are not affected by the experiment.
+                                product = random.choices(
+                                    [
+                                        ("soft_small", "SoftPack", 1.99, 500, 0),
+                                        ("soft_large", "SoftPack", 9.99, 3000, 0),
+                                        ("hard_small", "HardPack", 4.99, 0, 50),
+                                        ("hard_large", "HardPack", 19.99, 0, 300),
+                                        ("bundle", "Bundle", 9.99, 2500, 50),
+                                    ],
+                                    weights=[0.3, 0.2, 0.2, 0.1, 0.2],
+                                )[0]
+                                sku, ptype, price_eur, soft_grant, hard_grant = product
+                                price_cents = int(round(price_eur * 100))
+
+                                purchase_rows.append(
+                                    (
+                                        purchase_id_counter,
+                                        p.player_id,
+                                        session_id,
+                                        purchase_time.isoformat(timespec="seconds") + "Z",
+                                        f"prod_{sku}",
+                                        ptype,
+                                        "EUR",
+                                        price_cents,
+                                        price_cents,
+                                        1,
+                                        soft_grant,
+                                        hard_grant,
+                                        p.platform,
+                                        p.country_code,
+                                    )
+                                )
+                                purchase_id_counter += 1
+                                p.total_spend_eur += price_eur
 
                     # Move match_start_time forward a bit for the next match
                     match_start_time = end_time + timedelta(
@@ -877,13 +955,13 @@ def main() -> None:
     generate_teams_and_memberships(conn, players)
 
     print("Assigning experiments...")
-    generate_experiments(conn, players)
+    variant_by_player = generate_experiments(conn, players)
 
     print("Building DAU curve...")
     dau_curve = generate_dau_curve(NUM_DAYS)
 
     print("Generating sessions, events, and purchases...")
-    generate_sessions_events_purchases(conn, players, dau_curve)
+    generate_sessions_events_purchases(conn, players, dau_curve, variant_by_player)
 
     conn.close()
     print("Done. Database written to:", DB_PATH)

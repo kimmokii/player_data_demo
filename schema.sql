@@ -123,7 +123,7 @@ CREATE TABLE purchases (
 CREATE TABLE experiment_assignments (
     experiment_name   TEXT NOT NULL,
     player_id         INTEGER NOT NULL,
-    variant           TEXT NOT NULL,     -- 'A', 'B', 'control', ...
+    variant           TEXT NOT NULL,     -- 'Control', 'A', 'B', ...
     assigned_at_utc   TEXT NOT NULL,
 
     PRIMARY KEY (experiment_name, player_id),

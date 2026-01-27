@@ -1,3 +1,14 @@
 mock_game2.db
 .tmp.driveupload
 mock_game.db-shm
+
+# SQLite temp files
+*.db-wal
+*.db-shm
+
+# Python caches
+__pycache__/
+*.pyc
+
+# Excel temporary/lock files
+~$*.xlsx
