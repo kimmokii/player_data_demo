@@ -1,5 +1,6 @@
 from pathlib import Path
 import calendar
+from statistics import mean
 
 from openpyxl import load_workbook
 from openpyxl.chart import BarChart, Reference
@@ -21,15 +22,35 @@ ab_ws = wb["AB_retention"]      # raw AB data
 # --------------------------------------------------------------------
 # 1) Build AB-retention summary: average D1 retention per variant
 # --------------------------------------------------------------------
-ab_ws["H1"] = "variant"
-ab_ws["I1"] = "avg_d1_retention"
+variants = ["Control", "A", "B"]
 
-variants = ["control", "A", "B"]
+if "AB_summary" in wb.sheetnames:
+    wb.remove(wb["AB_summary"])
+ab_sum_ws = wb.create_sheet("AB_summary")
+
+ab_sum_ws["A1"] = "variant"
+ab_sum_ws["B1"] = "avg_d1_retention"
+
+variant_to_d1_values: dict[str, list[float]] = {v: [] for v in variants}
+variant_key = {v.lower(): v for v in variants}
+
+# AB_retention columns (from export_kpis.py):
+# A experiment_name, B variant, ... H d1_retention
+for row in ab_ws.iter_rows(min_row=2, values_only=True):
+    variant = row[1]
+    d1_retention = row[7]
+    variant_norm = str(variant).strip().lower() if variant is not None else ""
+    canonical_variant = variant_key.get(variant_norm)
+    if canonical_variant is not None and d1_retention is not None:
+        try:
+            variant_to_d1_values[canonical_variant].append(float(d1_retention))
+        except (TypeError, ValueError):
+            continue
+
 for i, v in enumerate(variants, start=2):
-    # Variant name
-    ab_ws[f"H{i}"] = v
-    # Average D1 retention (column H) for rows with this variant (column B)
-    ab_ws[f"I{i}"] = f'=AVERAGEIF($B:$B,H{i},$H:$H)'
+    ab_sum_ws[f"A{i}"] = v
+    values = variant_to_d1_values[v]
+    ab_sum_ws[f"B{i}"] = mean(values) if values else None
 
 
 # --------------------------------------------------------------------
@@ -162,10 +183,10 @@ add_bar_chart(
 # --------------------------------------------------------------------
 ab_max_row = 1 + len(variants)
 
-# Data: header in I1, values I2..I4
-data_ref = Reference(ab_ws, min_col=9, min_row=1, max_row=ab_max_row)
-# Categories: H2..H4 (control, A, B)
-cat_ref = Reference(ab_ws, min_col=8, min_row=2, max_row=ab_max_row)
+# Data: header in B1, values B2..B4
+data_ref = Reference(ab_sum_ws, min_col=2, min_row=1, max_row=ab_max_row)
+# Categories: A2..A4 (control, A, B)
+cat_ref = Reference(ab_sum_ws, min_col=1, min_row=2, max_row=ab_max_row)
 
 ab_chart = BarChart()
 ab_chart.title = "Avg D1 retention by variant"
