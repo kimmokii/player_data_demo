@@ -3,7 +3,7 @@ import calendar
 from statistics import mean
 
 from openpyxl import load_workbook
-from openpyxl.chart import BarChart, Reference
+from openpyxl.chart import BarChart, LineChart, Reference
 
 # --------------------------------------------------------------------
 # Load source workbook with KPI data
@@ -16,6 +16,7 @@ dau_ws = wb["DAU_daily"]        # columns: day (A), dau (B)
 wau_ws = wb["WAU_weekly"]       # columns: week (A), wau (B)
 mau_ws = wb["MAU_monthly"]      # columns: month_yyyy_mm (A), mau (B)
 rev_ws = wb["Revenue_daily"]    # columns: day (A), revenue_eur (B)
+rev_var_ws = wb["Revenue_by_variant_daily"]  # columns: day (A), Control (B), A (C), B (D)
 ab_ws = wb["AB_retention"]      # raw AB data
 
 
@@ -77,7 +78,40 @@ if "Dashboard" in wb.sheetnames:
 else:
     dash = wb.create_sheet("Dashboard")
 
-dash["A1"] = "KPI Dashboard"
+# Keep the sheet clean (no header text in cells)
+dash["A1"] = None
+
+
+def set_chart_title(chart, title: str) -> None:
+    """Set chart title text in an Excel-compatible way."""
+    chart.title = title
+    try:
+        chart.title.overlay = False
+    except Exception:
+        pass
+
+
+def _configure_axis(chart, label_skip: int = 1) -> None:
+    # Avoid Excel showing placeholder axis titles like "Horizontal (Category) Axis"
+    chart.x_axis.title = None
+    chart.y_axis.title = None
+
+    # Excel is picky about axis positions. openpyxl defaults both axes to "l".
+    chart.x_axis.axPos = "b"
+    chart.y_axis.axPos = "l"
+    chart.x_axis.crossAx = chart.y_axis.axId
+    chart.y_axis.crossAx = chart.x_axis.axId
+
+    chart.x_axis.tickLblPos = "nextTo"
+    chart.y_axis.tickLblPos = "nextTo"
+    chart.x_axis.delete = False
+    chart.y_axis.delete = False
+    chart.x_axis.majorTickMark = "out"
+    chart.y_axis.majorTickMark = "out"
+
+    if label_skip and label_skip > 1:
+        chart.x_axis.tickLblSkip = label_skip
+        chart.x_axis.tickMarkSkip = label_skip
 
 
 # --------------------------------------------------------------------
@@ -106,7 +140,7 @@ def add_bar_chart(
     cat_ref = Reference(data_sheet, min_col=cat_col, min_row=2, max_row=max_row)
 
     chart = BarChart()
-    chart.title = title
+    set_chart_title(chart, title)
 
     chart.add_data(data_ref, titles_from_data=True)
     chart.set_categories(cat_ref)
@@ -114,14 +148,7 @@ def add_bar_chart(
     chart.legend = None
     chart.varyColors = False
 
-
-    # Force axis tick labels to be shown next to the axes
-    chart.x_axis.tickLblPos = "nextTo"
-    chart.y_axis.tickLblPos = "nextTo"
-    chart.x_axis.delete = False
-    chart.y_axis.delete = False
-    chart.x_axis.majorTickMark = "out"
-    chart.y_axis.majorTickMark = "out"
+    _configure_axis(chart, label_skip=1)
 
     # Apply a single colour to the only series
     if chart.series:
@@ -132,18 +159,112 @@ def add_bar_chart(
     sheet.add_chart(chart, pos)
 
 
+def add_line_chart(
+    sheet,
+    title,
+    data_sheet,
+    cat_col,
+    val_col,
+    pos,
+    label_skip: int = 1,
+):
+    max_row = data_sheet.max_row
+    data_ref = Reference(data_sheet, min_col=val_col, min_row=1, max_row=max_row)
+    cat_ref = Reference(data_sheet, min_col=cat_col, min_row=2, max_row=max_row)
+
+    chart = LineChart()
+    set_chart_title(chart, title)
+    chart.add_data(data_ref, titles_from_data=True)
+    chart.set_categories(cat_ref)
+    chart.legend = None
+    chart.varyColors = False
+
+    # No point markers on dense daily series
+    if chart.series:
+        chart.series[0].marker.symbol = "none"
+
+    _configure_axis(chart, label_skip=label_skip)
+    sheet.add_chart(chart, pos)
+
+
+def add_multi_line_chart(
+    sheet,
+    title,
+    data_sheet,
+    cat_col,
+    min_val_col,
+    max_val_col,
+    pos,
+    label_skip: int = 1,
+    legend_position: str = "t",
+):
+    max_row = data_sheet.max_row
+    data_ref = Reference(
+        data_sheet,
+        min_col=min_val_col,
+        min_row=1,
+        max_col=max_val_col,
+        max_row=max_row,
+    )
+    cat_ref = Reference(data_sheet, min_col=cat_col, min_row=2, max_row=max_row)
+
+    chart = LineChart()
+    set_chart_title(chart, title)
+    chart.add_data(data_ref, titles_from_data=True)
+    chart.set_categories(cat_ref)
+    chart.varyColors = False
+
+    # No point markers on dense daily series
+    for s in chart.series:
+        try:
+            s.marker.symbol = "none"
+        except Exception:
+            pass
+
+    if chart.legend is not None:
+        chart.legend.position = legend_position
+        chart.legend.overlay = False
+
+    _configure_axis(chart, label_skip=label_skip)
+
+    # Safer way to remove the “extra horizontal line” look: disable gridlines.
+    # (Avoids editing axis line shape properties which can corrupt files in Excel.)
+    try:
+        chart.y_axis.majorGridlines = None
+    except Exception:
+        pass
+    sheet.add_chart(chart, pos)
+
+
 # --------------------------------------------------------------------
 # 4) KPI charts
 # --------------------------------------------------------------------
 
+daily_label_skip = max(1, dau_ws.max_row // 18)
+revenue_label_skip = max(1, rev_ws.max_row // 18)
+
 # DAU per day
-add_bar_chart(
+add_line_chart(
     dash,
     title="DAU",
     data_sheet=dau_ws,
     cat_col=1,
     val_col=2,
     pos="A3",
+    label_skip=daily_label_skip,
+)
+
+# Revenue per day by variant (EUR)
+add_multi_line_chart(
+    dash,
+    title="Revenue per day by variant (EUR)",
+    data_sheet=rev_var_ws,
+    cat_col=1,
+    min_val_col=2,
+    max_val_col=4,
+    pos="M33",
+    label_skip=revenue_label_skip,
+    legend_position="t",
 )
 
 # WAU per week
@@ -167,14 +288,14 @@ add_bar_chart(
 )
 
 # Revenue per day (EUR)
-add_bar_chart(
+add_line_chart(
     dash,
     title="Revenue per day (EUR)",
     data_sheet=rev_ws,
     cat_col=1,
     val_col=2,
     pos="M18",
-    color="9E480E",
+    label_skip=revenue_label_skip,
 )
 
 
@@ -189,7 +310,7 @@ data_ref = Reference(ab_sum_ws, min_col=2, min_row=1, max_row=ab_max_row)
 cat_ref = Reference(ab_sum_ws, min_col=1, min_row=2, max_row=ab_max_row)
 
 ab_chart = BarChart()
-ab_chart.title = "Avg D1 retention by variant"
+set_chart_title(ab_chart, "D1 retention by variant")
 ab_chart.add_data(data_ref, titles_from_data=True)
 ab_chart.set_categories(cat_ref)
 
@@ -198,13 +319,7 @@ ab_chart.set_categories(cat_ref)
 ab_chart.varyColors = True
 ab_chart.legend = None
 
-# Make sure axis labels are visible
-ab_chart.x_axis.tickLblPos = "nextTo"
-ab_chart.y_axis.tickLblPos = "nextTo"
-ab_chart.x_axis.delete = False
-ab_chart.y_axis.delete = False
-ab_chart.x_axis.majorTickMark = "out"
-ab_chart.y_axis.majorTickMark = "out"
+_configure_axis(ab_chart, label_skip=1)
 
 dash.add_chart(ab_chart, "A33")
 

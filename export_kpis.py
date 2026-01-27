@@ -65,6 +65,63 @@ ORDER BY day;
 rev_df = pd.read_sql_query(rev_sql, conn)
 
 # -----------------------------
+#    Revenue per day by variant (EUR)
+# -----------------------------
+# We use a day spine from sessions so days with zero purchases are included.
+day_spine_sql = """
+SELECT
+    substr(session_start_utc, 1, 10) AS day
+FROM sessions
+GROUP BY day
+ORDER BY day;
+"""
+
+day_spine_df = pd.read_sql_query(day_spine_sql, conn)
+
+rev_by_variant_sql = """
+SELECT
+    substr(p.purchase_time_utc, 1, 10) AS day,
+    ea.variant AS variant,
+    SUM(p.price_eur) / 100.0 AS revenue_eur
+FROM purchases p
+JOIN experiment_assignments ea
+  ON ea.player_id = p.player_id
+GROUP BY day, variant
+ORDER BY day, variant;
+"""
+
+rev_by_variant_long_df = pd.read_sql_query(rev_by_variant_sql, conn)
+
+if not rev_by_variant_long_df.empty:
+    rev_by_variant_wide_df = (
+        rev_by_variant_long_df.pivot_table(
+            index="day",
+            columns="variant",
+            values="revenue_eur",
+            aggfunc="sum",
+            fill_value=0.0,
+        )
+        .reset_index()
+    )
+else:
+    rev_by_variant_wide_df = pd.DataFrame({"day": []})
+
+# Ensure stable columns and ordering
+for v in ["Control", "A", "B"]:
+    if v not in rev_by_variant_wide_df.columns:
+        rev_by_variant_wide_df[v] = 0.0
+rev_by_variant_wide_df = rev_by_variant_wide_df[["day", "Control", "A", "B"]]
+
+# Left join to the day spine so all days exist (fill missing with 0)
+rev_by_variant_df = day_spine_df.merge(rev_by_variant_wide_df, on="day", how="left")
+for v in ["Control", "A", "B"]:
+    rev_by_variant_df[v] = rev_by_variant_df[v].fillna(0.0)
+
+# Also apply the same day spine to total revenue
+rev_df = day_spine_df.merge(rev_df, on="day", how="left")
+rev_df["revenue_eur"] = rev_df["revenue_eur"].fillna(0.0)
+
+# -----------------------------
 #   A/B test results: D1/D7/D30 retention per experiment & variant
 #
 # - first_session: first day player ever played
@@ -141,6 +198,7 @@ with pd.ExcelWriter(OUTPUT_XLSX, engine="xlsxwriter") as writer:
     wau_df.to_excel(writer, sheet_name="WAU_weekly", index=False)
     mau_df.to_excel(writer, sheet_name="MAU_monthly", index=False)
     rev_df.to_excel(writer, sheet_name="Revenue_daily", index=False)
+    rev_by_variant_df.to_excel(writer, sheet_name="Revenue_by_variant_daily", index=False)
     ab_df.to_excel(writer, sheet_name="AB_retention", index=False)
 
 print(f"KPI Excel generated: {OUTPUT_XLSX}")
