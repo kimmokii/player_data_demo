@@ -260,8 +260,7 @@ Ideas for extensions:
   - Different churn patterns or DAU shapes.
 - Add new experiments (e.g. onboarding, live ops events) and compare retention/revenue.
 - Extend `export_kpis.py` with:
-  - ARPU/ARPPU
-  - LTV cohorts
+  - ARPU
   - Platform or country splits
 - Add more charts to `kpi_dashboard.py`:
   - Revenue per month
