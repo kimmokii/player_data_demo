@@ -137,6 +137,64 @@ Prices are stored as **integer cents** (`price_eur` field), e.g. 4.99 EUR → `4
 
 ---
 
+## Mathematical models used (mock data generation)
+
+All stochastic behaviour is implemented in `generate_mock_data.py` using Python’s standard library RNG.
+
+**Libraries**
+
+- Standard library: `random`, `math`, `datetime`, `sqlite3`, `json`, `pathlib`
+- No NumPy/SciPy are used for generation.
+
+**Models (high level)**
+
+- **DAU curve** (post-launch decay + seasonality + patch spikes):
+  - Base curve (exponential decay to a floor):
+    $$\text{base}(t)=f + h\,e^{-t/\tau}$$
+    with $f=0.6$, $h=0.8$, and $\tau=\max(7, 0.1\cdot\text{num\_days})$.
+  - Seasonality and patches are multiplicative, plus small noise $U\sim\text{Unif}(0.95,1.05)$.
+  - Finally the curve is normalised so its max equals `MAX_DAU`.
+
+- **Player creation over time** (mixture distribution):
+  - Creation day is sampled from a mixture of uniform ranges to create a launch spike + tail:
+    60% in days 0–3, 25% in 4–30, 10% in 31–90, 5% in 91–end.
+
+- **Churn / lifetime** (mixture model):
+  - With probability 0.15, a player is “core” and does not churn within the simulated window.
+  - Otherwise lifetime $L$ is exponential:
+    $$L\sim\text{Exponential}(\lambda=1/45)$$
+    implemented via `random.expovariate(1/45)` and discretised to integer days.
+
+- **Sessions per active player per day** (segment-conditional):
+  - `casual` and `midcore`: categorical draws (via `random.choices`).
+  - `heavy`: Pareto-like draw:
+    $$X\sim\text{Pareto}(\alpha=2)$$
+    implemented via `random.paretovariate(2.0)` and capped to a max of 10 sessions.
+
+- **Session duration** (lognormal):
+  - $$D\sim\text{LogNormal}(\mu=\ln(600),\,\sigma=0.7)$$
+    implemented via `random.lognormvariate(math.log(600), 0.7)`, then clamped to at least 60 seconds.
+
+- **Matches / outcomes / currency deltas**:
+  - Match counts, game mode, and outcomes are categorical.
+  - Match durations are uniform over 60–900 seconds.
+  - Currency deltas are sampled from simple outcome-dependent integer ranges.
+
+- **Purchases** (Bernoulli trials + categorical catalogue):
+  - Baseline purchase probability per opportunity depends on spend segment (minnow/dolphin/whale).
+  - If a purchase happens, product is chosen from a weighted catalogue.
+
+- **Pricing experiment (`shop_pricing_v1`)** (Category X only):
+  - Variant assignment is categorical: Control 50%, A 25%, B 25%.
+  - Each purchase opportunity is Category X with probability `CATEGORY_X_SHARE`.
+  - If Category X, conversion probability is scaled by variant and spend segment:
+    $$p_{eff}=p_{base}\cdot m(\text{variant},\text{segment})$$
+  - If Category X, price is a categorical base price multiplied by a variant multiplier:
+    $$\text{price}=\text{base\_price}\cdot \alpha(\text{variant})$$
+  - Non-Category-X purchases are unaffected by the experiment.
+
+---
+
 ### 2. Inspect the database (optional)
 
 To see what was created:
@@ -239,10 +297,9 @@ If you want a quick visual that highlights the **Control/A/B behavior** for the 
 python plot_pricing_experiment.py
 ```
 
-This writes `pricing_experiment_effects.png` with
-category X purchases per 1k assigned players by variant, see below:
+This writes `pricing_experiment_effects.png` with:
 
-<img src="pricing_experiment_effects.png" width="800">
+- Category X purchases per 1k assigned players by variant
 
 ---
 
