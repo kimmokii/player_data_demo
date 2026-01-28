@@ -150,9 +150,9 @@ All stochastic behaviour is implemented in `generate_mock_data.py` using Python‚
 
 - **DAU curve** (post-launch decay + seasonality + patch spikes):
   - Base curve (exponential decay to a floor):
-    $$\text{base}(t)=f + h\,e^{-t/\tau}$$
-    with $f=0.6$, $h=0.8$, and $\tau=\max(7, 0.1\cdot\text{num\_days})$.
-  - Seasonality and patches are multiplicative, plus small noise $U\sim\text{Unif}(0.95,1.05)$.
+    $$\mathrm{base}(t)=f + h\,e^{-t/\tau}$$
+    with $f=0.6$, $h=0.8$, and $\tau=\max(7, 0.1\cdot N_{\mathrm{days}})$, where $N_{\mathrm{days}}$ is the number of simulated days.
+  - Seasonality and patches are multiplicative, plus small noise $U\sim\mathrm{Unif}(0.95,1.05)$.
   - Finally the curve is normalised so its max equals `MAX_DAU`.
 
 - **Player creation over time** (mixture distribution):
@@ -162,17 +162,17 @@ All stochastic behaviour is implemented in `generate_mock_data.py` using Python‚
 - **Churn / lifetime** (mixture model):
   - With probability 0.15, a player is ‚Äúcore‚Äù and does not churn within the simulated window.
   - Otherwise lifetime $L$ is exponential:
-    $$L\sim\text{Exponential}(\lambda=1/45)$$
+    $$L\sim\mathrm{Exponential}(\lambda=1/45)$$
     implemented via `random.expovariate(1/45)` and discretised to integer days.
 
 - **Sessions per active player per day** (segment-conditional):
   - `casual` and `midcore`: categorical draws (via `random.choices`).
   - `heavy`: Pareto-like draw:
-    $$X\sim\text{Pareto}(\alpha=2)$$
+    $$X\sim\mathrm{Pareto}(\alpha=2)$$
     implemented via `random.paretovariate(2.0)` and capped to a max of 10 sessions.
 
 - **Session duration** (lognormal):
-  - $$D\sim\text{LogNormal}(\mu=\ln(600),\,\sigma=0.7)$$
+  - $$D\sim\mathrm{LogNormal}(\mu=\ln(600),\,\sigma=0.7)$$
     implemented via `random.lognormvariate(math.log(600), 0.7)`, then clamped to at least 60 seconds.
 
 - **Matches / outcomes / currency deltas**:
@@ -188,9 +188,9 @@ All stochastic behaviour is implemented in `generate_mock_data.py` using Python‚
   - Variant assignment is categorical: Control 50%, A 25%, B 25%.
   - Each purchase opportunity is Category X with probability `CATEGORY_X_SHARE`.
   - If Category X, conversion probability is scaled by variant and spend segment:
-    $$p_{eff}=p_{base}\cdot m(\text{variant},\text{segment})$$
+    $$p_{\mathrm{eff}}=p_{\mathrm{base}}\cdot m(v, s)$$
   - If Category X, price is a categorical base price multiplied by a variant multiplier:
-    $$\text{price}=\text{base\_price}\cdot \alpha(\text{variant})$$
+    $$p=p_{0}\cdot \alpha(v)$$
   - Non-Category-X purchases are unaffected by the experiment.
 
 ---
